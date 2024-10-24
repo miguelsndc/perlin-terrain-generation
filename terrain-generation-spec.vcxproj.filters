@@ -24,6 +24,9 @@
     <ClCompile Include="shader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="camera.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="geometry.hpp">
@@ -32,5 +35,11 @@
     <ClInclude Include="shader.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="stb_image.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="camera.hpp" />
   </ItemGroup>
 </Project>
