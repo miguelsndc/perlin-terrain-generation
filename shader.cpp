@@ -4,56 +4,88 @@
 #include <fstream>
 #include <iostream>
 
-Shader::Shader(const std::string& vertexShaderPath, const std::string& pixelShaderPath)
+Shader::Shader(const std::string& vertexShaderPath, const std::string& pixelShaderPath,
+	const std::string& tscShaderPath, const std::string& tseShaderPath)
 	: m_program(0)
 {
-	std::string vertexCode, pixelCode;
-	std::ifstream vertexShaderFile, pixelShaderFile;
+	std::string vertexCode, pixelCode, tscCode, tseCode;
+	std::ifstream vertexFile, pixelFile, tscFile, tseFile;
 
-	vertexShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-	pixelShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+	vertexFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+	pixelFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+	tscFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+	tseFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 
 	try {
-		vertexShaderFile.open(vertexShaderPath);
-		pixelShaderFile.open(pixelShaderPath);
-		std::stringstream vertexShaderStream, pixelShaderStream;
-		vertexShaderStream << vertexShaderFile.rdbuf();
-		pixelShaderStream << pixelShaderFile.rdbuf();
-		vertexShaderFile.close();
-		pixelShaderFile.close();
-		vertexCode = vertexShaderStream.str();
-		pixelCode = pixelShaderStream.str();
+		vertexFile.open(vertexShaderPath);
+		pixelFile.open(pixelShaderPath);
+		tscFile.open(tscShaderPath);
+		tseFile.open(tseShaderPath);
+
+		std::stringstream vertexStream, pixelStream, tscStream, tseStream;
+		vertexStream << vertexFile.rdbuf();
+		pixelStream << pixelFile.rdbuf();
+		tscStream << tscFile.rdbuf();
+		tseStream << tseFile.rdbuf();
+
+		vertexFile.close();
+		pixelFile.close();
+		tscFile.close();
+		tseFile.close();
+
+		vertexCode = vertexStream.str();
+		pixelCode = pixelStream.str();
+		tscCode = tscStream.str();
+		tseCode = tseStream.str();
 	}
 	catch (std::ifstream::failure& e) {
 		std::cout << "SHADER FILES NO SUCCESSFULLY READ: " << e.what() << std::endl;
 	}
 
-	const char* vcode = vertexCode.c_str();
-	const char* pcode = pixelCode.c_str();
+	const char* vertexCodeRaw = vertexCode.c_str();
+	const char* pixelCodeRaw = pixelCode.c_str();
+	const char* tscCodeRaw = tscCode.c_str();
+	const char* tseCodeRaw = tseCode.c_str();
 
-	unsigned int vertex, pixel;
+	unsigned int vertex, pixel, tessCtrl, tessEv;
 	vertex = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertex, 1, &vcode, NULL);
+	glShaderSource(vertex, 1, &vertexCodeRaw, NULL);
 	glCompileShader(vertex);
 
 	checkShaderCompileErrors(vertex, "VERTEX");
 
 	pixel = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(pixel, 1, &pcode, NULL);
+	glShaderSource(pixel, 1, &pixelCodeRaw, NULL);
 	glCompileShader(pixel);
 
 	checkShaderCompileErrors(pixel, "PIXEL");
+
+	tessCtrl = glCreateShader(GL_TESS_CONTROL_SHADER);
+	glShaderSource(tessCtrl, 1, &tscCodeRaw, NULL);
+	glCompileShader(tessCtrl);
+
+	checkShaderCompileErrors(tessCtrl, "TESSELLATION CONTROL");
+
+	tessEv = glCreateShader(GL_TESS_EVALUATION_SHADER);
+	glShaderSource(tessEv, 1, &tseCodeRaw, NULL);
+	glCompileShader(tessEv);
+
+	checkShaderCompileErrors(tessEv, "TESSELLATION EVALUATION");
 
 	m_program = glCreateProgram();
 
 	glAttachShader(m_program, vertex);
 	glAttachShader(m_program, pixel);
+	glAttachShader(m_program, tessCtrl);
+	glAttachShader(m_program, tessEv);
 	glLinkProgram(m_program);
 
 	checkProgramLinkErrors(m_program);
 
 	glDeleteShader(vertex);
 	glDeleteShader(pixel);
+	glDeleteShader(tessCtrl);
+	glDeleteShader(tessEv);
 };
 
 void Shader::checkShaderCompileErrors(unsigned int target, const char* type) {

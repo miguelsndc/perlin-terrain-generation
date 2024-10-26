@@ -1,14 +1,11 @@
 #version 460 core
 
 layout (location = 0) in vec3 a_position;
+layout (location = 1) in vec2 a_texCoord;
 
-uniform mat4 projection;
-uniform mat4 view;
-uniform mat4 model;
-
-out float height;
+out vec2 TexCoord;
 
 void main() {
-	height = a_position.y;
-	gl_Position = projection * view * model * vec4(a_position, 1.0);
+	gl_Position = vec4(a_position, 1.0);
+	TexCoord = a_texCoord;
 }

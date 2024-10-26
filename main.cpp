@@ -17,6 +17,10 @@ void cursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 void framebufferSizeCallback(GLFWwindow* window, int w, int h);
 
 static void gatherComputeInfo() {
+	int maxTessLevel;
+	glGetIntegerv(GL_MAX_TESS_GEN_LEVEL, &maxTessLevel);
+	std::cout << "Max available tess level: " << maxTessLevel << '\n';
+
 	int workGroupCount[3];
 
 	glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &workGroupCount[0]);
@@ -66,7 +70,6 @@ int main(void) {
 	glfwSetCursorPosCallback(window, cursorPosCallback);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
 		std::cout << "Could not load GLAD" << std::endl;
 		glfwTerminate();
@@ -76,31 +79,17 @@ int main(void) {
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_MULTISAMPLE);
 
-	Shader base("./shaders/vertex_base.glsl", "./shaders/fragment_base.glsl");
-
-	mat4 projection = mat4(1.0f), view = mat4(1.0f), model = mat4(1.0f);
-	model = glm::rotate(model, glm::radians(110.0f), vec3(1.0f, 0.0f, 0.0f));
-	projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.f);
-
-	base.use();
-	base.setMat4("projection", projection);
-	base.setMat4("view", view);
-	base.setMat4("model", model);
-
-	//unsigned int VBO, VAO, EBO;
-	//glGenVertexArrays(1, &VAO);
-	//glGenBuffers(1, &VBO);
-	//glGenBuffers(1, &EBO);
-	//glBindVertexArray(VAO);
-	//glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	//glBufferData(GL_ARRAY_BUFFER, planeVertices.size() * sizeof(GLfloat), planeVertices.data(), GL_STATIC_DRAW);
-	//glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void*)0);
-	//glEnableVertexAttribArray(0);
-	//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	//glBufferData(GL_ELEMENT_ARRAY_BUFFER, planeIndexBuffer.size() * sizeof(GLuint), planeIndexBuffer.data(), GL_STATIC_DRAW);
+	unsigned int heightMapTexture;
+	glGenTextures(1, &heightMapTexture);
+	glBindTexture(GL_TEXTURE_2D, heightMapTexture);
+	// set the texture wrapping/filtering options (on the currently bound texture object)
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	int width, height, nrChannels;
-	unsigned char* data = stbi_load("./textures/amazon-heightmap.png", &width, &height, &nrChannels, 0);
+	unsigned char* data = stbi_load("./textures/heightmap.png", &width, &height, &nrChannels, 0);
 
 	if (!data) {
 		std::cout << "COULD NOT LOAD THE HEIGHTMAP: " << stbi_failure_reason() << std::endl;
@@ -108,33 +97,51 @@ int main(void) {
 		return -1;
 	}
 
-	std::vector<GLfloat> vertices;
-	vertices.reserve(width * height * 3);
-	float scale = 64.0f / 256.0f, yShift = -8.0f;
-	for (int i = 0; i < height; i++) {
-		for (int j = 0; j < width; j++) {
-			unsigned char* texel = data + (j + width * i) * nrChannels;
-			unsigned int y = texel[0];
-
-			vertices.emplace_back(-height / 2.0f + i);
-			vertices.emplace_back(y * scale + yShift);
-			vertices.emplace_back(-width / 2.0f + j);
-		}
-	}
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
 	stbi_image_free(data);
 
-	std::vector<GLuint> indices;
-	indices.reserve(width * height * 3);
-	for (int i = 0; i < height - 1; i++) {
-		for (int j = 0; j < width; j++) {
-			for (int k = 0; k < 2; k++) {
-				indices.emplace_back(j + width * (i + k));
-			}
+	Shader base("./shaders/vertex_base.glsl", "./shaders/fragment_base.glsl",
+		"./shaders/tess_control.glsl", "./shaders/tess_eval.glsl");
+
+	mat4 projection = mat4(1.0f), view = mat4(1.0f), model = mat4(1.0f);
+	projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 200.f);
+
+	base.use();
+	base.setMat4("projection", projection);
+	base.setMat4("view", view);
+	base.setMat4("model", model);
+	base.setInt("heightMap", 0);
+
+	const int REZ = 20;
+	std::vector<GLfloat> vertices;
+	vertices.reserve(REZ * REZ * REZ);
+	for (int i = 0; i < REZ; i++) {
+		for (int j = 0; j < REZ; j++) {
+			vertices.emplace_back(-width / 2.0f + width * i / (float)REZ); // v.x
+			vertices.emplace_back(0.0f); // v.y 
+			vertices.emplace_back(-height / 2.0f + height * j / (float)REZ); // v.z
+			vertices.emplace_back(i / (float)REZ); //u
+			vertices.emplace_back(j / (float)REZ); // v
+
+			vertices.emplace_back(-width / 2.0f + width * (i + 1) / (float)REZ); // v.x
+			vertices.emplace_back(0.0f); // v.y 
+			vertices.emplace_back(-height / 2.0f + height * j / (float)REZ); // v.z
+			vertices.emplace_back((i + 1) / (float)REZ); //u
+			vertices.emplace_back(j / (float)REZ); // v
+
+			vertices.emplace_back(-width / 2.0f + width * i / (float)REZ); // v.x
+			vertices.emplace_back(0.0f); // v.y 
+			vertices.emplace_back(-height / 2.0f + height * (j + 1) / (float)REZ); // v.z
+			vertices.emplace_back(i / (float)REZ); //u
+			vertices.emplace_back((j + 1) / (float)REZ); // v
+
+			vertices.emplace_back(-width / 2.0f + width * (i + 1) / (float)REZ); // v.x
+			vertices.emplace_back(0.0f); // v.y 
+			vertices.emplace_back(-height / 2.0f + height * (j + 1) / (float)REZ); // v.z
+			vertices.emplace_back((i + 1) / (float)REZ); //u
+			vertices.emplace_back((j + 1) / (float)REZ); // v
 		}
 	}
-
-	const unsigned int NUM_STRIPS = height - 1;
-	const unsigned int NUM_VERTS_PER_STRIP = width * 2;
 
 	GLuint terrainVAO, terrainVBO, terrainEBO;
 	glGenVertexArrays(1, &terrainVAO);
@@ -146,18 +153,15 @@ int main(void) {
 	glBindBuffer(GL_ARRAY_BUFFER, terrainVBO);
 	glBufferData(GL_ARRAY_BUFFER,
 		vertices.size() * sizeof(float),       // size of vertices buffer
-		&vertices[0],                          // pointer to first element
+		vertices.data(),                          // pointer to first element
 		GL_STATIC_DRAW);
 
 	// position attribute
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-		indices.size() * sizeof(unsigned int), // size of indices buffer
-		&indices[0],                           // pointer to first element
-		GL_STATIC_DRAW);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+	glPatchParameteri(GL_PATCH_VERTICES, 4);
 
 	gatherComputeInfo();
 
@@ -177,19 +181,9 @@ int main(void) {
 
 		base.use();
 		base.setMat4("view", camera.getViewMatrix());
-		vec3 p = camera.position();
-		std::cout << "Camera position: (" << p.x << ", " << p.y << ", " << p.z << ")\n";
+		glBindTexture(GL_TEXTURE_2D, heightMapTexture);
 		glBindVertexArray(terrainVAO);
-		// render the mesh triangle strip by triangle strip - each row at a time
-		for (unsigned int strip = 0; strip < NUM_STRIPS; ++strip)
-		{
-			glDrawElements(GL_TRIANGLE_STRIP,   // primitive type
-				NUM_VERTS_PER_STRIP, // number of indices to render
-				GL_UNSIGNED_INT,     // index data type
-				(void*)(sizeof(unsigned int)
-					* NUM_VERTS_PER_STRIP
-					* strip)); // offset to starting index
-		}
+		glDrawArrays(GL_PATCHES, 0, 4 * REZ * REZ);
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();

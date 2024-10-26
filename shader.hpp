@@ -11,7 +11,9 @@ private:
 	void checkShaderCompileErrors(unsigned int target, const char* type);
 	void checkProgramLinkErrors(unsigned int target);
 public:
-	Shader(const std::string& vertex_shader_path, const std::string& pixel_shader_path);
+	Shader(const std::string& vertex_shader_path, const std::string& pixel_shader_path,
+		const std::string& tsc_shader_path, const std::string& tse_shader_path
+	);
 	~Shader();
 	void use();
 	void setVec2(const std::string& name, const glm::vec2& value) const;
